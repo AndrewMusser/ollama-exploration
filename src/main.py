@@ -9,28 +9,6 @@ def create_agent():
     for f in temp_files:
         os.remove(f)
 
-    from langchain_community.tools.tavily_search import TavilySearchResults
-    search = TavilySearchResults()
-
-    from langchain_community.document_loaders import WebBaseLoader
-    from langchain_community.vectorstores import FAISS
-    from langchain_openai import OpenAIEmbeddings
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-    loader = WebBaseLoader("https://docs.smith.langchain.com/overview")
-    docs = loader.load()
-    documents = RecursiveCharacterTextSplitter(
-        chunk_size=1000, chunk_overlap=200
-    ).split_documents(docs)
-    vector = FAISS.from_documents(documents, OpenAIEmbeddings())
-    retriever = vector.as_retriever()
-
-    from langchain.tools.retriever import create_retriever_tool
-    retriever_tool = create_retriever_tool(
-        retriever,
-        "langsmith_search",
-        "Search for information about LangSmith. For any questions about LangSmith, you must use this tool!",
-    )
-
     # Import things that are needed generically
     from langchain.pydantic_v1 import BaseModel, Field
     from langchain.tools import BaseTool, StructuredTool, tool
@@ -44,10 +22,10 @@ def create_agent():
     from custom_tools import LogTool
     log_tool = LogTool()
 
-    tools = [search, retriever_tool, time_tool, log_tool]
+    tools = [time_tool, log_tool]
 
-    from langchain_openai import ChatOpenAI
-    llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
+    from langchain_ollama import Ollama
+    llm = Ollama(model="llama3.1", temperature=0)
 
     prompt = ChatPromptTemplate.from_messages(
         [
