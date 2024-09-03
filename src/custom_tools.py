@@ -8,26 +8,33 @@ from langchain.callbacks.manager import (
 from datetime import datetime
 import xml.etree.ElementTree as ET
 import subprocess
+import pytz
+import os.path
 
 class LogInput(BaseModel):
     ip: str = Field(description="IP address of the machine")
-    start_date: datetime = Field(description="The start date and time for the desired log messages")
-    end_date: datetime = Field(description="The end date and time for the desired log messages")
+    start_date: datetime = Field(description="Offset-aware start date and time for the desired log messages, in the EST timezone")
+    end_date: datetime = Field(description="Offset-aware end date and time for the desired log messages, in the EST timezone")
 
 class LogTool(BaseTool):
     name = "LogTool"
-    description = "useful for retrieving the logs from a machine. You specify the IP address of the machine as an input, and a start and end date, and the tool returns a list of log messages that occurred betwen those dates. If you don't know the IP, you should assume that it is 127.0.0.1"
+    description = """
+        Useful for retrieving the logs from a machine. 
+        You specify the IP address of the machine as an input, and a start and end date, and the tool returns a list of log messages that occurred betwen those dates.
+        If you don't know the IP, you should assume that it is 127.0.0.1
+    """
     args_schema: Type[BaseModel] = LogInput
     return_direct: bool = False
 
     def _run(
         self, ip: str, start_date: datetime, end_date: datetime, run_manager: Optional[CallbackManagerForToolRun] = None
     ) -> str:
-        # Convert offset-aware time to offset-naive.
-        if start_date.tzinfo is not None:
-            start_date = start_date.astimezone(tz=None).replace(tzinfo=None)
-        if end_date.tzinfo is not None:
-            end_date = end_date.astimezone(tz=None).replace(tzinfo=None)
+        # Convert to offset-aware if needed.
+        est = pytz.timezone('US/Eastern')
+        if start_date.tzinfo is None:
+            start_date = est.localize(start_date)
+        if end_date.tzinfo is None:
+            end_date = est.localize(end_date)
         # Now get to work retrieving the log file, reading it, and searching it.
         log_file_path = self._retrieve_log_file(ip)
         log_messages = self._get_log_messages(log_file_path)
@@ -47,25 +54,30 @@ class LogTool(BaseTool):
         raise NotImplementedError("Log tool does not support async")
 
     def _retrieve_log_file(self, ip):
+    
         pvi_transfer_path = "C:\BRAutomation\PVI\V4.12\PVI\Tools\PVITransfer\PVITransfer.exe"
         pil_file_path = "..\data\get_logger.pil"
         logger_file_path = "..\data\SystemLogger.logpkg"
-        with open(pil_file_path, 'w+') as f:
-            f.write(f'Connection "/IF=TCPIP /SA=1", "/DA=2 /DAIP={ip} /REPO=11160", "WT=30"\n')
-            f.write('LoadSystemInformationForLogger\n')
-            f.write('LoadTextModulesForLogger\n')
-            f.write(f'Logger "System", "$arlogsys", ".logpkg", "{logger_file_path}", "en"')
-
-        cmd = []
-        cmd.append(pvi_transfer_path)
-        cmd.append('-silent')
-        cmd.append(pil_file_path)
-        process = subprocess.run(cmd)
-        if process.returncode == 0:
+        # If the log file already exists, skip the next step of querying it, and just return its name.
+        if os.path.isfile("..\data\SystemLogger.logpkg"):
             return logger_file_path
         else:
-            return ''
-            # Handle the error somehow   
+            with open(pil_file_path, 'w+') as f:
+                f.write(f'Connection "/IF=TCPIP /SA=1", "/DA=2 /DAIP={ip} /REPO=11160", "WT=30"\n')
+                f.write('LoadSystemInformationForLogger\n')
+                f.write('LoadTextModulesForLogger\n')
+                f.write(f'Logger "System", "$arlogsys", ".logpkg", "{logger_file_path}", "en"')
+
+            cmd = []
+            cmd.append(pvi_transfer_path)
+            cmd.append('-silent')
+            cmd.append(pil_file_path)
+            process = subprocess.run(cmd)      
+            if process.returncode == 0:
+                return logger_file_path
+            else:
+                return ''
+                # Handle the error somehow   
 
     def _retrieve_text(self, texts, id):
         for text in texts:
@@ -92,9 +104,13 @@ class LogTool(BaseTool):
         log_entries = []
         # Iterate over EventEntry elements
         for event in root.findall('.//ns:EventEntry', ns):
+            utc = pytz.utc
+            est = pytz.timezone('US/Eastern')
+            utc_timestamp = utc.localize(datetime.strptime(event.get('Time'), "%Y-%m-%dT%H:%M:%S.%f"))
+            est_timestamp = utc_timestamp.astimezone(est)
             entry = {
                 'level': event.get('Level'),
-                'timestamp': datetime.strptime(event.get('Time'), "%Y-%m-%dT%H:%M:%S.%f"),
+                'timestamp': est_timestamp,
                 'error_number': event.get('ErrorNumber'),
                 'ascii_data': event.find('ns:ASCII', ns).text if event.find('ns:ASCII', ns) is not None else '',
                 'text': self._retrieve_text(texts, event.get('TextId'))
@@ -106,6 +122,9 @@ class LogTool(BaseTool):
     def _filter_log_messages(self, messages, start_date, end_date):
         filtered_log_messages = []
         for message in messages:
+            print(start_date)
+            print(message['timestamp'])
+            print(end_date)
             if start_date <= message['timestamp'] <= end_date:
                 filtered_log_messages.append(message)
         return filtered_log_messages

@@ -1,4 +1,13 @@
+from langchain_core.prompts import ChatPromptTemplate
+
 def create_agent():
+
+    # Clear out all temporary data. 
+    import glob
+    import os
+    temp_files = glob.glob('../data/*')
+    for f in temp_files:
+        os.remove(f)
 
     from langchain_community.tools.tavily_search import TavilySearchResults
     search = TavilySearchResults()
@@ -40,18 +49,28 @@ def create_agent():
     from langchain_openai import ChatOpenAI
     llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
 
-    from langchain import hub
-    # Get the prompt to use - you can modify this!
-    prompt = hub.pull("hwchase17/openai-functions-agent")
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """
+                    You are an expert capable of reporting on the status of industrial machines by reading their logs. 
+                    You receive queries from users about the status of a machine within a certain timeframe, query the logs for that timeframe, and summarize the results to answer the query.
+                    You must always start by determining the requested timeframe. If it is not included in the query, search through the chat_history. And if you can't find it there, ask the user for more information on the timeframe.
+                    A machine can be queried by its IP address. If the user does not provide an IP address, assume 127.0.0.1. 
+                """,
+            ),
+            ("placeholder", "{chat_history}"),
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
 
     from langchain.agents import create_tool_calling_agent
     agent = create_tool_calling_agent(llm, tools, prompt)
 
     from langchain.agents import AgentExecutor
     agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
-
-    # response = agent_executor.invoke({"input": "what's the weather in SF?", "chat_history": []})
-    # print(response)
 
     from langchain_community.chat_message_histories import ChatMessageHistory
     from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -80,5 +99,6 @@ if __name__ == "__main__":
     # Example of running the agent directly from the command line
     agent = create_agent()
     print('Hi! How can I help you?')
-    input_text = input()
-    print(run_agent(agent, input_text))
+    while True:
+        input_text = input()
+        print(run_agent(agent, input_text))
