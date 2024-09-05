@@ -17,15 +17,19 @@ def create_agent():
         """Use this tool to look up the current time on this workstation. You will need to use this tool first for any queries related to dates (i.e. last week, 2 Fridays ago, 3 days from now, etc)"""
         import datetime
         now = datetime.datetime.now()
-        return str(now)
+        print(now)
+        return f"The current time and date is: {str(now)}"
 
     from custom_tools import LogTool
     log_tool = LogTool()
 
     tools = [time_tool, log_tool]
 
-    from langchain_ollama import Ollama
-    llm = Ollama(model="llama3.1", temperature=0)
+    from langchain_ollama import ChatOllama
+    llm = ChatOllama(model="llama3.1", temperature=0)
+
+    # from langchain_openai import ChatOpenAI
+    # llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
 
     prompt = ChatPromptTemplate.from_messages(
         [

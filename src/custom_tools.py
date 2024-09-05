@@ -13,13 +13,13 @@ import os.path
 
 class LogInput(BaseModel):
     ip: str = Field(description="IP address of the machine")
-    start_date: datetime = Field(description="Offset-aware start date and time for the desired log messages, in the EST timezone")
-    end_date: datetime = Field(description="Offset-aware end date and time for the desired log messages, in the EST timezone")
+    start_date: datetime = Field(description="Offset-aware start date and time for the desired log messages, in the EST timezone, in ISO format")
+    end_date: datetime = Field(description="Offset-aware end date and time for the desired log messages, in the EST timezone, in ISO format")
 
 class LogTool(BaseTool):
     name = "LogTool"
     description = """
-        Useful for retrieving the logs from a machine. 
+        Useful for retrieving the logs from a machine, and finding out what happened on the machine.
         You specify the IP address of the machine as an input, and a start and end date, and the tool returns a list of log messages that occurred betwen those dates.
         If you don't know the IP, you should assume that it is 127.0.0.1
     """
@@ -122,9 +122,6 @@ class LogTool(BaseTool):
     def _filter_log_messages(self, messages, start_date, end_date):
         filtered_log_messages = []
         for message in messages:
-            print(start_date)
-            print(message['timestamp'])
-            print(end_date)
             if start_date <= message['timestamp'] <= end_date:
                 filtered_log_messages.append(message)
         return filtered_log_messages
