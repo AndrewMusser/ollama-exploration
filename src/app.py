@@ -4,7 +4,7 @@ from llm import LLM
 # Initialize the agent
 llm = LLM()
 
-st.title("Machine log viewer")
+st.title("Machine Log Analyst")
 
 # Initialize chat history
 if "messages" not in st.session_state:
