@@ -1,4 +1,10 @@
 from langchain_core.prompts import ChatPromptTemplate
+from langchain.schema import RunnableSequence
+import datetime
+from custom_tools import LogTool, DateTimeTool
+from langchain_ollama import ChatOllama
+
+chat_history = []
 
 def create_agent():
 
@@ -8,39 +14,26 @@ def create_agent():
     temp_files = glob.glob('../data/*')
     for f in temp_files:
         os.remove(f)
-
-    # Import things that are needed generically
-    from langchain.pydantic_v1 import BaseModel, Field
-    from langchain.tools import BaseTool, StructuredTool, tool
-    @tool
-    def time_tool() -> str:
-        """Use this tool to look up the current time on this workstation. You will need to use this tool first for any queries related to dates (i.e. last week, 2 Fridays ago, 3 days from now, etc)"""
-        import datetime
-        now = datetime.datetime.now()
-        print(now)
-        return f"The current time and date is: {str(now)}"
-
-    from custom_tools import LogTool
+    
+    date_time_tool = DateTimeTool()
     log_tool = LogTool()
 
-    tools = [time_tool, log_tool]
-
-    from langchain_ollama import ChatOllama
     llm = ChatOllama(model="llama3.1", temperature=0)
-
-    # from langchain_openai import ChatOpenAI
-    # llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
 
     prompt = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
-                """
-                    You are an expert capable of reporting on the status of industrial machines by reading their logs. 
-                    You receive queries from users about the status of a machine within a certain timeframe, query the logs for that timeframe, and summarize the results to answer the query.
-                    You must always start by determining the requested timeframe. If it is not included in the query, search through the chat_history. And if you can't find it there, ask the user for more information on the timeframe.
-                    A machine can be queried by its IP address. If the user does not provide an IP address, assume 127.0.0.1. 
-                """,
+                "you answer questions about fruit",
+                # """
+                #     You are an expert capable of reporting on the status of industrial machines by reading their logs.
+                #     You receive four pieces of information from the user:
+                #     1. A specific query about the machine status.
+                #     2. The IP address of the machine. 
+                #     3. A date and time range.
+                #     4. The list of log entries. 
+                #     You use the IP address and date and time range to parse through the log entries and answer the specific query.                    
+                # """,
             ),
             ("placeholder", "{chat_history}"),
             ("human", "{input}"),
@@ -48,11 +41,8 @@ def create_agent():
         ]
     )
 
-    from langchain.agents import create_tool_calling_agent
-    agent = create_tool_calling_agent(llm, tools, prompt)
-
-    from langchain.agents import AgentExecutor
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+    # chain = LLMChain(llm=llm, prompt=prompt)
+    sequence = prompt | llm
 
     from langchain_community.chat_message_histories import ChatMessageHistory
     from langchain_core.runnables.history import RunnableWithMessageHistory
@@ -66,16 +56,28 @@ def create_agent():
         history_messages_key="chat_history",
     )
 
-    return agent_with_chat_history
+    return sequence
+
+# Function to format chat history into a single string
+def format_chat_history(history):
+    return "\n".join([f"Human: {h['human']}\nAI: {h['ai']}" for h in history])
 
 def run_agent(agent, input_text):
-    response = agent.invoke(
-        {"input": input_text},
-        # This is needed because in most real world scenarios, a session id is needed
-        # It isn't really used here because we are using a simple in memory ChatMessageHistory
-        config={"configurable": {"session_id": "<foo>"}},
-    )
-    return response["output"]
+
+    # Consolidate input information. 
+    input_variables = {
+        "input": input_text,
+        "chat_history": chat_history,  # if you have previous history, include it here
+        "agent_scratchpad": "",  # initial agent state
+    }
+
+    # Run the chain.
+    response = agent.invoke(input_variables)
+
+    # Add the latest conversation to the history
+    chat_history.append({"human": input_variables['input'], "ai": response})
+
+    return response
 
 if __name__ == "__main__":
     # Example of running the agent directly from the command line

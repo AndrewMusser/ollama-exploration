@@ -135,3 +135,20 @@ class LogTool(BaseTool):
                 serialized_message = str(message['timestamp']) + ' | ' + message['level'] + ' | ' + message['error_number'] + ' | ' + message['text']
             serialized_messages = serialized_messages + serialized_message + '\n'
         return serialized_messages
+    
+class DateTimeTool():
+
+    def retrieve_date_and_time(self):
+        now = datetime.datetime.now()
+        # Format the date as "Friday, the 13th of August, 2024"
+        date_str = now.strftime("%A, the %d")
+        # Add the ordinal suffix (st, nd, rd, th)
+        day = now.day
+        if 4 <= day <= 20 or 24 <= day <= 30:
+            suffix = "th"
+        else:
+            suffix = ["st", "nd", "rd"][day % 10 - 1]
+        date_str += f"{suffix} of %B, %Y"
+        # Format the time as "21:04:44"
+        time_str = now.strftime("%H:%M:%S")
+        return date_str, time_str

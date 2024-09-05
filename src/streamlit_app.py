@@ -1,5 +1,5 @@
 import streamlit as st
-from main import create_agent, run_agent
+from go import create_agent, run_agent
 
 # Initialize the agent
 agent = create_agent()
